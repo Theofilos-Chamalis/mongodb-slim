@@ -23,8 +23,8 @@ on:
   pull_request:
     paths: [Dockerfile, docker-entrypoint.sh, "scripts/**", "test/**", ".github/workflows/build-and-publish.yml"]
   schedule:
-    - cron: "23 5 * * *"     # daily 05:23 UTC — build only new upstream versions
-    - cron: "17 4 * * 1"     # Mondays 04:17 UTC — rebuild all for base CVEs
+    - cron: "23 5 * * *"     # daily 05:23 UTC, builds only new upstream versions
+    - cron: "17 4 * * 1"     # Mondays 04:17 UTC, rebuilds everything for base CVEs
   workflow_dispatch:
     inputs:
       majors:
@@ -201,7 +201,7 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "v$V" >/dev/null 2>&1; then
-            echo "release v$V already exists — skipping"
+            echo "release v$V already exists, skipping"
           else
             gh release create "v$V" \
               --title "MongoDB $V" \

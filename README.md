@@ -1,28 +1,30 @@
-# mongodb-slim 🍃
+# mongodb-slim
 
-**Lean, secure, multi-arch MongoDB Community Server on [Chainguard Wolfi](https://github.com/wolfi-dev) (glibc).**
-A drop-in-compatible alternative to the official `mongo` image — smaller, hardened, and published for **every** MongoDB version, free.
+A small, multi-arch MongoDB Community Server image built on [Chainguard Wolfi](https://github.com/wolfi-dev). It runs MongoDB's official binaries, works on both x86_64 and arm64, and behaves like the official `mongo` image so you can swap it in without changing anything.
 
 [![build-and-publish](https://github.com/OWNER/mongodb-slim/actions/workflows/build-and-publish.yml/badge.svg)](https://github.com/OWNER/mongodb-slim/actions/workflows/build-and-publish.yml)
 
-> **Unofficial community project.** Not affiliated with or endorsed by MongoDB, Inc. or Chainguard. MongoDB® is a trademark of MongoDB, Inc. This project only repackages MongoDB's official, unmodified server binaries. See [NOTICE.md](NOTICE.md).
+> Unofficial community project. It is not affiliated with or endorsed by MongoDB, Inc. or Chainguard. MongoDB is a trademark of MongoDB, Inc. All this project does is repackage MongoDB's official, unmodified binaries. See [NOTICE.md](NOTICE.md).
 
----
+## Why this exists
 
-## Why
+MongoDB doesn't publish an Alpine build, because the server isn't built for musl libc. So "MongoDB on Alpine" normally means either compiling it yourself or gluing a glibc shim onto Alpine, and neither is fun to maintain.
 
-MongoDB doesn't ship a musl/Alpine build, so "MongoDB on Alpine" usually means compiling from source or bolting a glibc shim onto Alpine. **Wolfi** sidesteps all of that: it's a minimal, `apk`-based, **glibc** undistro, so MongoDB's official glibc binaries run natively — no compilation, no shim.
+Wolfi avoids the whole problem. It's a minimal, apk-based distro that uses glibc, so MongoDB's official glibc binaries just run. Nothing is compiled, nothing is patched, and there's no shim in the way.
 
-| | mongodb-slim | official `mongo` | `chainguard/mongodb` |
-|---|---|---|---|
-| Base | Wolfi (glibc) | Ubuntu | Wolfi (glibc) |
-| Image size (uncompressed) | ~815 MB | ~1.1 GB | small |
-| Architectures | amd64 + arm64 | amd64 + arm64 | amd64 + arm64 |
-| Runs as non-root | ✅ (uid 999) | ⚠️ root by default | ✅ |
-| Official-image env vars / init scripts | ✅ | ✅ | ❌ (runs `mongod` directly) |
-| Version-pinned tags, free | ✅ all tracked versions | ✅ | ⚠️ `:latest` only on free tier |
-| SBOM + build provenance | ✅ | — | ✅ |
-| Bundled `mongosh` | ✅ | ✅ | — |
+## How small is it, really
+
+Here are the compressed sizes (the number you actually download), pulled from Docker Hub:
+
+| Image | Compressed size | Notes |
+|---|---|---|
+| **mongodb-slim** | **~184 MB** | bundles `mongosh`, official-compatible entrypoint |
+| chainguard/mongodb | ~184 MB | no `mongosh`, no init-script entrypoint |
+| bitnami/mongodb | ~269 MB | |
+| mongodb/mongodb-community-server | ~330 MB | |
+| official `mongo` | ~337 MB | |
+
+So it's roughly half the size of the official image, and as small as the smallest mainstream option while still shipping `mongosh` and staying drop-in compatible. It is not the tiniest MongoDB image in existence (there are ancient 3.x or stripped-down community images that are smaller), but among current, maintained, multi-arch images it's about as lean as it gets.
 
 ## Quick start
 
@@ -33,11 +35,10 @@ docker run -d --name mongo -p 27017:27017 \
   -v mongo-data:/data/db \
   ghcr.io/OWNER/mongodb-slim:8
 
-# connect
 docker exec -it mongo mongosh -u root -p change-me
 ```
 
-`docker-compose.yml`:
+With Compose:
 
 ```yaml
 services:
@@ -55,77 +56,77 @@ secrets:
   mongo_root_pw: { file: ./mongo_root_pw.txt }
 ```
 
-## Images & tags
+## Images and tags
 
-Published to **GHCR** (always) and **Docker Hub** (when configured):
+Everything is published to GHCR, and to Docker Hub once that's configured:
 
 - `ghcr.io/OWNER/mongodb-slim:<tag>`
 - `docker.io/DOCKERHUB_NS/mongodb-slim:<tag>`
 
 | Tag | Points to |
 |---|---|
-| `latest` | newest tracked release (currently 8.0.x) |
-| `8`, `7` | newest release in that major |
-| `8.0`, `7.0` | newest patch in that minor |
-| `8.0.26`, `7.0.37`, … | exact, immutable version |
+| `latest` | the newest tracked release (8.0.x right now) |
+| `8`, `7` | the newest release in that major |
+| `8.0`, `7.0` | the newest patch in that minor |
+| `8.0.26`, `7.0.37`, ... | an exact version that never moves |
 
-Tracked majors are the currently-supported MongoDB LTS lines, configured via `TRACKED_MAJORS` (default `8.0 7.0`). MongoDB 6.0 and older are end-of-life and are intentionally not published.
+The tracked majors are MongoDB's currently supported LTS lines, set with `TRACKED_MAJORS` (default `8.0 7.0`). MongoDB 6.0 and older are end-of-life, so they're left out on purpose.
 
-## Configuration (compatible with the official image)
+## Configuration
 
-| Variable | Purpose |
+These match the official image, so existing setups keep working:
+
+| Variable | What it does |
 |---|---|
-| `MONGO_INITDB_ROOT_USERNAME` / `_PASSWORD` | create a root user on first start (enables `--auth`) |
-| `MONGO_INITDB_ROOT_USERNAME_FILE` / `_PASSWORD_FILE` | read the above from a file (Docker/K8s secrets) |
-| `MONGO_INITDB_DATABASE` | database that `/docker-entrypoint-initdb.d` scripts run against |
+| `MONGO_INITDB_ROOT_USERNAME` / `_PASSWORD` | creates a root user on first start, which also turns on `--auth` |
+| `MONGO_INITDB_ROOT_USERNAME_FILE` / `_PASSWORD_FILE` | reads those from a file, for Docker or Kubernetes secrets |
+| `MONGO_INITDB_DATABASE` | the database that init scripts run against |
 
-On **first** start with an empty `/data/db`, scripts in `/docker-entrypoint-initdb.d` run once:
-`*.js` are executed with `mongosh`, `*.sh` are sourced. Mount them read-only, world-readable
-(the server runs as uid 999). See [`examples/`](examples/).
+The first time the container starts with an empty `/data/db`, anything in `/docker-entrypoint-initdb.d` runs once. `.js` files run through `mongosh` and `.sh` files are sourced. Mount them read-only and make sure they're world-readable, since the server runs as uid 999. There's a working example in [`examples/`](examples/).
 
-Everything after the image name is passed straight to `mongod`, e.g.:
+Anything you put after the image name is passed straight to `mongod`:
 
 ```bash
 docker run ghcr.io/OWNER/mongodb-slim:8 mongod --replSet rs0 --bind_ip_all
 ```
 
-## Security posture
+## Security
 
-- **glibc, no shims** — official binaries, unmodified; matched to Wolfi's **OpenSSL 3** by selecting the `ubuntu2404`/`ubuntu2204` build.
-- **Non-root** — `mongod` runs as `mongodb` (uid 999); the entrypoint drops privileges via `su-exec`.
-- **Minimal surface** — only the runtime libraries `mongod` actually links (`libcurl`, `libssl3`, `libcrypto3`, `libgcc`) plus `mongosh`, `bash`, `tini`.
-- **Checksum-verified** — every binary is pinned by SHA-256 at build time; the build fails on mismatch.
-- **Supply chain** — images ship with an SBOM and build provenance (`--sbom --provenance`).
-- **`tini`** as PID 1 for correct signal handling and zombie reaping.
+- It uses glibc directly, with no shims. The binaries are MongoDB's official ones, unmodified, and we pick the `ubuntu2404` or `ubuntu2204` build so they line up with Wolfi's OpenSSL 3.
+- `mongod` runs as a normal user (`mongodb`, uid 999). The entrypoint drops root with `su-exec`.
+- The image only carries what `mongod` actually links against (`libcurl`, `libssl3`, `libcrypto3`, `libgcc`), plus `mongosh`, `bash`, and `tini`. Nothing else.
+- Every binary is checked against a published SHA-256 during the build, so a bad download fails the build instead of shipping.
+- Images are published with an SBOM and build provenance.
+- `tini` is PID 1, so signals and zombie processes are handled properly.
 
-### Known cosmetic warning
+### One harmless warning you'll see
 
-`mongod: /usr/lib/libcurl.so.4: no version information available` on startup is **benign** — Wolfi's `libcurl` omits Ubuntu's symbol-version tags. All symbols resolve and every operation works; only the version annotation is absent.
+On startup you may see `mongod: /usr/lib/libcurl.so.4: no version information available`. It's cosmetic. Wolfi's libcurl doesn't carry Ubuntu's symbol-version tags, but all the symbols resolve and everything works. Only the version label is missing.
 
-## How it stays up to date
+## How it stays current
 
-- A **daily** scheduled run resolves the latest version per tracked major from MongoDB's release feed and builds any version not already on GHCR — so new releases ship within about a day, automatically.
-- A **weekly** scheduled run rebuilds everything on the latest Wolfi base, absorbing base-image CVE fixes even when MongoDB itself hasn't changed.
-- Both live in [`build-and-publish.yml`](.github/workflows/build-and-publish.yml); version/checksum resolution is deterministic — see [`scripts/resolve-versions.py`](scripts/resolve-versions.py).
+- A daily job checks MongoDB's release feed and builds any new version that isn't published yet, so a new release usually shows up within a day without anyone doing anything.
+- A weekly job rebuilds everything on the latest Wolfi base, so security fixes in the base flow through even when MongoDB itself hasn't changed.
+- Both live in [`build-and-publish.yml`](.github/workflows/build-and-publish.yml), and the version picking is done by [`scripts/resolve-versions.py`](scripts/resolve-versions.py).
 
-## Validation
+## How it's tested
 
-Every `(version, architecture)` pair is built **natively** (amd64 on `ubuntu-latest`, arm64 on `ubuntu-24.04-arm`) and must pass [`test/smoke-test.sh`](test/smoke-test.sh) before anything is published. The suite checks: healthy startup, exact version, non-root execution, clean linkage, OpenSSL 3, WiredTiger, enforced auth, authenticated CRUD, init-script execution, and data persistence across restart.
+Nothing gets published until it passes. Every version is built for both amd64 (on `ubuntu-latest`) and arm64 (on `ubuntu-24.04-arm`), natively, and run through [`test/smoke-test.sh`](test/smoke-test.sh). That checks a real container: it starts and goes healthy, reports the right version, runs as a non-root user, has clean library linkage, uses OpenSSL 3 and WiredTiger, enforces auth, does authenticated reads and writes, runs init scripts, and keeps its data across a restart.
 
-Run it locally against any tag:
+You can run the same test yourself:
 
 ```bash
 docker build -t mongodb-slim:test .
 ./test/smoke-test.sh mongodb-slim:test 8.0.26
 ```
 
-## Building locally
+## Building it yourself
 
 ```bash
-# amd64
+# current default (amd64)
 docker buildx build --load -t mongodb-slim:test .
 
-# a specific version (see scripts/resolve-versions.py for checksums)
+# a specific version (checksums come from scripts/resolve-versions.py)
 docker buildx build --load -t mongodb-slim:7 \
   --build-arg MONGO_VERSION=7.0.37 \
   --build-arg MONGO_TARGET=ubuntu2204 \
@@ -135,4 +136,4 @@ docker buildx build --load -t mongodb-slim:7 \
 
 ## Licensing
 
-MongoDB Community Server is distributed under the **SSPL**; `mongosh` under **Apache-2.0**. This repository's own tooling (Dockerfile, scripts, workflows) is **MIT** ([LICENSE](LICENSE)). Redistribution details and attribution are in [NOTICE.md](NOTICE.md).
+MongoDB Community Server is under the SSPL, and `mongosh` is under Apache-2.0. The packaging in this repo (Dockerfile, scripts, workflows) is MIT, see [LICENSE](LICENSE). The details on redistribution and attribution are in [NOTICE.md](NOTICE.md).

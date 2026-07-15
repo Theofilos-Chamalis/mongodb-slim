@@ -1,31 +1,31 @@
 # syntax=docker/dockerfile:1
 #
-# mongodb-slim — MongoDB Community Server on Chainguard Wolfi (glibc)
+# mongodb-slim: MongoDB Community Server on Chainguard Wolfi (glibc).
 #
-# MongoDB does not ship musl/Alpine or apk builds of the server, but it does ship
-# glibc binary tarballs. Wolfi is a minimal, glibc-based, apk-driven "undistro",
-# so we run MongoDB's official ubuntu2404 (OpenSSL 3) binaries on it natively —
-# no compilation, no glibc shim. Everything below is pinned + checksum-verified.
+# MongoDB doesn't ship a musl/Alpine or apk build of the server, but it does ship
+# glibc binary tarballs. Wolfi is a minimal, glibc-based, apk-driven distro, so
+# MongoDB's official ubuntu2404 (OpenSSL 3) binaries just run on it. Nothing is
+# compiled, there's no glibc shim, and every download is checksum-verified below.
 #
-# All version/checksum values are overridable via --build-arg so CI can bump them
-# without editing this file (see scripts/resolve-versions.py).
+# The version and checksum values are build args so CI can bump them without
+# touching this file. See scripts/resolve-versions.py.
 
 ARG BASE_IMAGE=cgr.dev/chainguard/wolfi-base:latest
 
-# --- MongoDB server (community "targeted" ubuntu2404 tarball => OpenSSL 3) ---
+# MongoDB server: the community "targeted" ubuntu2404 tarball, built against OpenSSL 3.
 ARG MONGO_VERSION=8.0.26
 ARG MONGO_TARGET=ubuntu2404
 ARG MONGO_SHA256_AMD64=e5be0cc89d7439cd3fd49d78030c590c7d6f0d1bfe615ac54a30751b5d4c63f4
 ARG MONGO_SHA256_ARM64=32390bc7e303da3965db90acee14f23e2cb7fa37aa9391910b07a522452fb0e3
 
-# --- mongosh (matching OpenSSL 3 build, published on GitHub releases) ---
+# mongosh: the matching OpenSSL 3 build from the GitHub releases page.
 ARG MONGOSH_VERSION=2.9.2
 ARG MONGOSH_SHA256_AMD64=36e13df6feac978c819c5902fe8ba279b34fef42acbc65e09d01aff9ee62e40c
 ARG MONGOSH_SHA256_ARM64=10c0ae51125b7942aec3c68ee00587f2f4e275b2b7393e4e1746d4c3c86728d4
 
 
 ##############################################################################
-# Stage 1 — download + checksum-verify the official binaries
+# Stage 1: download the official binaries and verify their checksums.
 ##############################################################################
 FROM ${BASE_IMAGE} AS fetch
 
@@ -36,11 +36,13 @@ ARG MONGO_SHA256_ARM64
 ARG MONGOSH_VERSION
 ARG MONGOSH_SHA256_AMD64
 ARG MONGOSH_SHA256_ARM64
-# Provided automatically by buildx for each platform: "amd64" | "arm64"
+# buildx sets this automatically for each platform: "amd64" or "arm64".
 ARG TARGETARCH
 
 USER root
-RUN apk add --no-cache curl   # busybox tar (in base) handles -z + --strip-components
+# We only need a downloader. The base image's busybox tar already handles
+# gzip and --strip-components, so there's no separate tar package to install.
+RUN apk add --no-cache curl
 
 WORKDIR /work
 RUN set -eux; \
@@ -65,8 +67,9 @@ RUN set -eux; \
     echo "${sh_sha}  mongosh.tgz" | sha256sum -c -; \
     mkdir -p /work/mongosh; \
     tar -xzf mongosh.tgz --strip-components=1 -C /work/mongosh; \
-    # ship only the mongosh binary — skip mongosh_crypt_v1.so (~112MB, only used
-    # for client-side field-level encryption *in the shell*); keeps the image lean
+    # Copy only the mongosh binary. We skip mongosh_crypt_v1.so (about 112MB),
+    # which is only needed for client-side field-level encryption inside the
+    # shell. Leaving it out keeps the image noticeably smaller.
     cp -a /work/mongosh/bin/mongosh /rootfs/usr/local/bin/; \
     \
     chmod 0755 /rootfs/usr/local/bin/*; \
@@ -74,15 +77,15 @@ RUN set -eux; \
 
 
 ##############################################################################
-# Stage 2 — minimal runtime
+# Stage 2: the actual runtime image, kept as small as we can.
 ##############################################################################
 FROM ${BASE_IMAGE} AS final
 
 ARG MONGO_VERSION
 ARG MONGOSH_VERSION
 
-# Runtime libraries required by mongod (see: readelf -d mongod) + mongosh.
-# glibc / libresolv / libm / libc come from the base image.
+# The libraries mongod links against (confirmed with `readelf -d mongod`), plus
+# what mongosh needs. glibc, libresolv, libm and libc all come from the base.
 USER root
 RUN set -eux; \
     apk add --no-cache \
@@ -104,9 +107,9 @@ RUN set -eux; \
 COPY --from=fetch /rootfs/ /
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
-# Sanity checks baked into the build. Executing each binary under `set -e` is a
-# fail-closed linkage gate: if any NEEDED shared library were unresolvable the
-# dynamic loader aborts with a non-zero exit and the build fails here.
+# A quick sanity check that doubles as a linkage gate. Running each binary under
+# `set -e` means that if any required shared library can't be resolved, the
+# loader exits non-zero and the build fails right here instead of shipping.
 RUN set -eux; \
     chmod 0755 /usr/local/bin/docker-entrypoint.sh; \
     ln -s /usr/local/bin/docker-entrypoint.sh /docker-entrypoint.sh; \

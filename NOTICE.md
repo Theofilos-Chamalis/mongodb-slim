@@ -29,7 +29,7 @@ checksum at build time.
 
 MongoDB Community Server is licensed under the **SSPL**. Redistributing the
 unmodified binaries (as these images do) is permitted. The SSPL's principal
-condition concerns **offering the software as a service** to third parties — if
+condition concerns **offering the software as a service** to third parties. If
 you do that, review the SSPL (in particular Section 13) for your obligations.
 Full text: https://www.mongodb.com/licensing/server-side-public-license
 

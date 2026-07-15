@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
-# mongodb-slim entrypoint — behaviourally compatible with the official `mongo`
-# image (docker-library/mongo). Supports:
-#   - MONGO_INITDB_ROOT_USERNAME / _PASSWORD  (+ *_FILE secret variants)
-#   - MONGO_INITDB_DATABASE
-#   - /docker-entrypoint-initdb.d/*.sh and *.js executed on first init
-#   - automatic --auth when a root user is bootstrapped
-#   - dropping from root to the "mongodb" user
+# Entrypoint for mongodb-slim. It behaves like the official mongo image
+# (docker-library/mongo) so existing setups keep working. It handles:
+#   * MONGO_INITDB_ROOT_USERNAME / _PASSWORD, and the *_FILE secret variants
+#   * MONGO_INITDB_DATABASE
+#   * running /docker-entrypoint-initdb.d/*.sh and *.js on the first start
+#   * turning on --auth once a root user has been created
+#   * dropping from root down to the "mongodb" user
 #
 set -Eeuo pipefail
 
@@ -23,9 +23,10 @@ if [ "$originalArgOne" = 'mongod' ] && [ "$(id -u)" = '0' ]; then
 	exec su-exec mongodb "$0" "$@"
 fi
 
-# --- helpers ---------------------------------------------------------------
+# Helpers.
 
-# file_env VAR [DEFAULT] — populate VAR from VAR or VAR_FILE (Docker secrets).
+# Fill VAR from either VAR or VAR_FILE (the file form is for Docker secrets).
+# Usage: file_env VAR [DEFAULT]
 file_env() {
 	local var="$1" fileVar="${1}_FILE" def="${2:-}"
 	if [ -n "${!var:-}" ] && [ -n "${!fileVar:-}" ]; then
@@ -42,7 +43,7 @@ file_env() {
 	unset "$fileVar"
 }
 
-# _have_arg FLAG ARGS... — true if FLAG (or FLAG=...) is present.
+# True if FLAG (or FLAG=something) is somewhere in the given args.
 _have_arg() {
 	local target="$1"; shift
 	local arg
@@ -54,7 +55,7 @@ _have_arg() {
 	return 1
 }
 
-# _get_arg_val FLAG ARGS... — echo the value of FLAG or FLAG=value.
+# Print the value that follows FLAG, or the value in FLAG=value.
 _get_arg_val() {
 	local target="$1"; shift
 	local want=
@@ -81,7 +82,7 @@ _wait_for_mongod() {
 	done
 }
 
-# --- init detection --------------------------------------------------------
+# Work out whether this is a first run that still needs initializing.
 
 needInit=
 if [ "$originalArgOne" = 'mongod' ]; then
@@ -96,14 +97,14 @@ if [ "$originalArgOne" = 'mongod' ]; then
 	fi
 fi
 
-# --- first-run initialization ---------------------------------------------
+# First-run initialization.
 
 if [ -n "$needInit" ]; then
 	echo "mongodb-slim: initializing fresh dbPath ${dbPath}"
 
 	tempPort=27017
-	# Build temp-server args from the user's, minus networking/auth flags that
-	# would interfere with local, unauthenticated bootstrapping.
+	# Start from the user's args but drop the networking and auth flags, since we
+	# want a temporary local server with no auth to do the bootstrapping on.
 	tempArgs=()
 	skipNext=
 	for arg in "$@"; do
@@ -165,7 +166,7 @@ if [ -n "$needInit" ]; then
 	echo "mongodb-slim: initialization complete"
 fi
 
-# --- enable auth on the real server if we bootstrapped a user --------------
+# If we created a root user, start the real server with auth turned on.
 
 if [ "$originalArgOne" = 'mongod' ] \
 	&& [ -n "${MONGO_INITDB_ROOT_USERNAME:-}" ] \
