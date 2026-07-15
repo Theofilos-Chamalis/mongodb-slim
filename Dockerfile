@@ -120,8 +120,11 @@ RUN set -eux; \
     mongosh --version
 
 LABEL org.opencontainers.image.title="mongodb-slim" \
-      org.opencontainers.image.description="Lean, secure, multi-arch MongoDB Community Server on Chainguard Wolfi (glibc). Drop-in compatible with the official mongo image." \
+      org.opencontainers.image.description="The leanest maintained MongoDB Community Server image. Official binaries on Chainguard Wolfi (glibc), multi-arch, drop-in compatible with the official mongo image." \
       org.opencontainers.image.version="${MONGO_VERSION}" \
+      org.opencontainers.image.source="https://github.com/Theofilos-Chamalis/mongodb-slim" \
+      org.opencontainers.image.url="https://github.com/Theofilos-Chamalis/mongodb-slim" \
+      org.opencontainers.image.documentation="https://github.com/Theofilos-Chamalis/mongodb-slim#readme" \
       org.opencontainers.image.vendor="mongodb-slim (community project, not affiliated with MongoDB, Inc.)" \
       org.opencontainers.image.licenses="SSPL-1.0" \
       org.mongodb-slim.mongosh.version="${MONGOSH_VERSION}"
