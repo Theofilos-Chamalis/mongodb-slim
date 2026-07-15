@@ -8,7 +8,7 @@
 //     -e MONGO_INITDB_ROOT_USERNAME=root -e MONGO_INITDB_ROOT_PASSWORD=secret \
 //     -e MONGO_INITDB_DATABASE=appdb \
 //     -v "$PWD/examples/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro" \
-//     ghcr.io/OWNER/mongodb-slim:8
+//     ghcr.io/theofilos-chamalis/mongodb-slim:8
 //
 // NOTE: the server runs as uid 999, so mounted scripts must be world-readable.
 

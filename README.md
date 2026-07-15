@@ -2,7 +2,7 @@
 
 The leanest maintained MongoDB Community Server image on Docker Hub, built on [Chainguard Wolfi](https://github.com/wolfi-dev). It runs MongoDB's official binaries, works on both x86_64 and arm64, and behaves like the official `mongo` image, so you can drop it in without changing anything.
 
-[![build-and-publish](https://github.com/OWNER/mongodb-slim/actions/workflows/build-and-publish.yml/badge.svg)](https://github.com/OWNER/mongodb-slim/actions/workflows/build-and-publish.yml)
+[![build-and-publish](https://github.com/Theofilos-Chamalis/mongodb-slim/actions/workflows/build-and-publish.yml/badge.svg)](https://github.com/Theofilos-Chamalis/mongodb-slim/actions/workflows/build-and-publish.yml)
 
 > Unofficial community project. It is not affiliated with or endorsed by MongoDB, Inc. or Chainguard. MongoDB is a trademark of MongoDB, Inc. All this project does is repackage MongoDB's official, unmodified binaries. See [NOTICE.md](NOTICE.md).
 
@@ -35,7 +35,7 @@ docker run -d --name mongo -p 27017:27017 \
   -e MONGO_INITDB_ROOT_USERNAME=root \
   -e MONGO_INITDB_ROOT_PASSWORD=change-me \
   -v mongo-data:/data/db \
-  ghcr.io/OWNER/mongodb-slim:8
+  ghcr.io/theofilos-chamalis/mongodb-slim:8
 
 docker exec -it mongo mongosh -u root -p change-me
 ```
@@ -45,7 +45,7 @@ With Compose:
 ```yaml
 services:
   mongo:
-    image: ghcr.io/OWNER/mongodb-slim:8
+    image: ghcr.io/theofilos-chamalis/mongodb-slim:8
     restart: unless-stopped
     ports: ["27017:27017"]
     environment:
@@ -62,8 +62,8 @@ secrets:
 
 Everything is published to GHCR, and to Docker Hub once that's configured:
 
-- `ghcr.io/OWNER/mongodb-slim:<tag>`
-- `docker.io/DOCKERHUB_NS/mongodb-slim:<tag>`
+- `ghcr.io/theofilos-chamalis/mongodb-slim:<tag>`
+- `docker.io/theofxam/mongodb-slim:<tag>`
 
 | Tag | Points to |
 |---|---|
@@ -89,7 +89,7 @@ The first time the container starts with an empty `/data/db`, anything in `/dock
 Anything you put after the image name is passed straight to `mongod` (and the entrypoint still adds `--bind_ip_all` for you, so this stays reachable):
 
 ```bash
-docker run ghcr.io/OWNER/mongodb-slim:8 mongod --replSet rs0
+docker run ghcr.io/theofilos-chamalis/mongodb-slim:8 mongod --replSet rs0
 ```
 
 ## Migrating from the official image
