@@ -4,7 +4,6 @@
 A drop-in-compatible alternative to the official `mongo` image — smaller, hardened, and published for **every** MongoDB version, free.
 
 [![build-and-publish](https://github.com/OWNER/mongodb-slim/actions/workflows/build-and-publish.yml/badge.svg)](https://github.com/OWNER/mongodb-slim/actions/workflows/build-and-publish.yml)
-[![watch-upstream](https://github.com/OWNER/mongodb-slim/actions/workflows/watch-upstream.yml/badge.svg)](https://github.com/OWNER/mongodb-slim/actions/workflows/watch-upstream.yml)
 
 > **Unofficial community project.** Not affiliated with or endorsed by MongoDB, Inc. or Chainguard. MongoDB® is a trademark of MongoDB, Inc. This project only repackages MongoDB's official, unmodified server binaries. See [NOTICE.md](NOTICE.md).
 
@@ -105,9 +104,9 @@ docker run ghcr.io/OWNER/mongodb-slim:8 mongod --replSet rs0 --bind_ip_all
 
 ## How it stays up to date
 
-- **`watch-upstream`** runs daily, resolves the latest version per tracked major from MongoDB's release feed, and dispatches a build for any version not already on GHCR — so new images ship within a day of release.
-- **`build-and-publish`** also runs weekly to rebuild on the latest Wolfi base, absorbing upstream CVE fixes even when MongoDB itself hasn't changed.
-- Version/checksum resolution is deterministic — see [`scripts/resolve-versions.py`](scripts/resolve-versions.py).
+- A **daily** scheduled run resolves the latest version per tracked major from MongoDB's release feed and builds any version not already on GHCR — so new releases ship within about a day, automatically.
+- A **weekly** scheduled run rebuilds everything on the latest Wolfi base, absorbing base-image CVE fixes even when MongoDB itself hasn't changed.
+- Both live in [`build-and-publish.yml`](.github/workflows/build-and-publish.yml); version/checksum resolution is deterministic — see [`scripts/resolve-versions.py`](scripts/resolve-versions.py).
 
 ## Validation
 

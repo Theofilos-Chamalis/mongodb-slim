@@ -1,36 +1,36 @@
 name: build-and-publish
 
-# Builds every tracked MongoDB major as a multi-arch (amd64 + arm64) image,
+# Builds every tracked MongoDB LTS major as a multi-arch (amd64 + arm64) image,
 # smoke-tests each arch natively, then publishes to GHCR (always) and Docker Hub
-# (when configured). Runs on push to main, weekly (to absorb Wolfi security
-# updates), on manual dispatch, and when the watcher finds a new upstream release.
+# (when configured).
+#
+# Triggers:
+#   - push / PR        build + test the current code (PRs never publish)
+#   - workflow_dispatch manual run (optionally a subset of majors)
+#   - schedule (daily)  build ONLY versions not yet published -> new releases
+#                       ship within ~a day, automatically
+#   - schedule (weekly) rebuild everything on the latest Wolfi base, absorbing
+#                       base-image CVE fixes even when MongoDB hasn't changed
+#
+# The "new version" check lives in the resolve job below (not a separate watcher
+# workflow) because a workflow dispatched via GITHUB_TOKEN would be blocked by
+# GitHub's anti-recursion rule and never run.
 
 on:
   push:
     branches: [main]
-    paths:
-      - Dockerfile
-      - docker-entrypoint.sh
-      - scripts/**
-      - test/**
-      - .github/workflows/build-and-publish.yml
+    paths: [Dockerfile, docker-entrypoint.sh, "scripts/**", "test/**", ".github/workflows/build-and-publish.yml"]
   pull_request:
-    paths:
-      - Dockerfile
-      - docker-entrypoint.sh
-      - scripts/**
-      - test/**
-      - .github/workflows/build-and-publish.yml
+    paths: [Dockerfile, docker-entrypoint.sh, "scripts/**", "test/**", ".github/workflows/build-and-publish.yml"]
   schedule:
-    - cron: "17 4 * * 1"      # Mondays 04:17 UTC — refresh for base-image CVEs
+    - cron: "23 5 * * *"     # daily 05:23 UTC — build only new upstream versions
+    - cron: "17 4 * * 1"     # Mondays 04:17 UTC — rebuild all for base CVEs
   workflow_dispatch:
     inputs:
       majors:
-        description: "Space-separated MongoDB majors to build (e.g. '8.0 7.0')"
+        description: "Space-separated majors to build (blank = tracked default)"
         required: false
         default: ""
-  repository_dispatch:
-    types: [upstream-update]
 
 concurrency:
   group: build-and-publish-${{ github.ref }}
@@ -39,6 +39,9 @@ concurrency:
 permissions:
   contents: write        # create version tags / releases
   packages: write        # push to GHCR
+
+env:
+  DAILY_CRON: "23 5 * * *"
 
 jobs:
   resolve:
@@ -53,19 +56,43 @@ jobs:
       - id: r
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          MAJORS: ${{ github.event.inputs.majors || github.event.client_payload.majors || '' }}
+          MAJORS: ${{ github.event.inputs.majors || '' }}
         run: |
           set -euo pipefail
           if [ -n "$MAJORS" ]; then
-            matrix="$(python3 scripts/resolve-versions.py --majors "$MAJORS" --images-only)"
+            all="$(python3 scripts/resolve-versions.py --majors "$MAJORS" --images-only)"
           else
-            matrix="$(python3 scripts/resolve-versions.py --images-only)"
+            all="$(python3 scripts/resolve-versions.py --images-only)"
           fi
+
+          # Force a full rebuild for everything EXCEPT the daily "new-only" cron.
+          force=true
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "${{ github.event.schedule }}" = "$DAILY_CRON" ]; then
+            force=false
+          fi
+
+          if [ "$force" = true ]; then
+            matrix="$all"
+          else
+            owner="${GITHUB_REPOSITORY_OWNER,,}"
+            token="$(curl -fsSL "https://ghcr.io/token?scope=repository:${owner}/mongodb-slim:pull" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])' 2>/dev/null || echo "")"
+            published="$(curl -fsSL -H "Authorization: Bearer ${token}" "https://ghcr.io/v2/${owner}/mongodb-slim/tags/list" 2>/dev/null | python3 -c 'import sys,json;print(" ".join(json.load(sys.stdin).get("tags") or []))' 2>/dev/null || echo "")"
+            echo "already published: ${published:-<none>}"
+            matrix="$(python3 - "$all" "$published" <<'PY'
+          import sys, json
+          images = json.loads(sys.argv[1])
+          published = set(sys.argv[2].split())
+          print(json.dumps([i for i in images if i["version"] not in published]))
+          PY
+          )"
+          fi
+
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "Resolved:"; echo "$matrix" | python3 -m json.tool
+          echo "Will build:"; echo "$matrix" | python3 -m json.tool
 
   test:
     needs: resolve
+    if: needs.resolve.outputs.matrix != '[]' && needs.resolve.outputs.matrix != ''
     strategy:
       fail-fast: false
       matrix:
@@ -96,7 +123,7 @@ jobs:
 
   publish:
     needs: [resolve, test]
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && needs.resolve.outputs.matrix != '[]' && needs.resolve.outputs.matrix != ''
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
