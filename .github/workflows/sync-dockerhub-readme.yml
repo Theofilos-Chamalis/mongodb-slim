@@ -1,0 +1,31 @@
+name: sync-dockerhub-readme
+
+# Keeps the Docker Hub repository description in sync with this README. It runs
+# when README.md is edited by a person, on a weekly schedule (to pick up the
+# automated refresh commits, which do not trigger push events), and on demand.
+
+on:
+  push:
+    branches: [main]
+    paths: [README.md]
+  schedule:
+    - cron: "40 7 * * 1"     # Mondays 07:40 UTC, after refresh-docs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: vars.DOCKERHUB_NAMESPACE != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Push README and short description to Docker Hub
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ vars.DOCKERHUB_NAMESPACE }}/mongodb-slim
+          short-description: "Lean, secure, multi-arch MongoDB Community Server on Wolfi. Drop-in for the official mongo image."
+          readme-filepath: ./README.md

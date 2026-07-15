@@ -1,0 +1,25 @@
+name: cleanup-ghcr
+
+# Prunes untagged image versions from the GHCR package on a schedule. Untagged
+# versions accumulate as tags move (every rebuild produces a new digest and
+# leaves the previous one dangling). All tagged versions are kept.
+
+on:
+  schedule:
+    - cron: "50 7 * * 1"     # Mondays 07:50 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete untagged versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: mongodb-slim
+          package-type: container
+          delete-only-untagged-versions: "true"

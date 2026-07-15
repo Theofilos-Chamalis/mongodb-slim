@@ -60,6 +60,10 @@ secrets:
 
 ## Images and tags
 
+<!-- current-versions:start -->
+**Currently published:** MongoDB `8.0.26` and `7.0.37`, with `mongosh 2.9.2`. Last refreshed 2026-07-16.
+<!-- current-versions:end -->
+
 Everything is published to GHCR, and to Docker Hub once that's configured:
 
 - `ghcr.io/theofilos-chamalis/mongodb-slim:<tag>`
@@ -127,7 +131,13 @@ On startup you may see `mongod: /usr/lib/libcurl.so.4: no version information av
 
 - A daily job checks MongoDB's release feed and builds any new version that isn't published yet, so a new release usually shows up within a day without anyone doing anything.
 - A weekly job rebuilds everything on the latest Wolfi base, so security fixes in the base flow through even when MongoDB itself hasn't changed.
-- Both live in [`build-and-publish.yml`](.github/workflows/build-and-publish.yml), and the version picking is done by [`scripts/resolve-versions.py`](scripts/resolve-versions.py).
+- Every few weeks a small job refreshes the "currently published" line above, which also keeps GitHub's scheduled jobs from going idle.
+- The Docker Hub description is kept in sync with this README, and untagged image layers on GHCR are pruned on a schedule so they don't pile up.
+- Version selection lives in [`scripts/resolve-versions.py`](scripts/resolve-versions.py); the build itself is in [`build-and-publish.yml`](.github/workflows/build-and-publish.yml).
+
+### Version policy
+
+It tracks the two newest MongoDB LTS major lines (8.0 and 7.0 today). When a new major ships, it is adopted automatically about three weeks after its GA date, and the oldest line drops out of the builds at the same time. So when 9.0 arrives you get 9.0 and 8.0, and 7.0 stops getting new builds. Images already published for a dropped line are left in place rather than deleted, so anything still pulling them keeps working. You can change how many lines are kept or the adoption delay with `KEEP_MAJORS` and `NEW_MAJOR_MIN_AGE_DAYS`, or pin an exact set with `TRACKED_MAJORS`.
 
 ## How it's tested
 

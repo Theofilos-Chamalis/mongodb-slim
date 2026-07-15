@@ -1,0 +1,46 @@
+name: refresh-docs
+
+# Runs weekly. It rewrites the "currently published" line in the README when
+# the tracked versions change or when it has been about three weeks since the
+# last refresh. The periodic commit also keeps GitHub from disabling the
+# scheduled workflows for inactivity (only commits reset that 60-day timer).
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"     # Mondays 07:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-docs
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Refresh the current-versions block if it is due
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/refresh-readme.py
+
+      - name: Commit and push if the README changed
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- README.md; then
+            echo "README unchanged, nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs: refresh current MongoDB versions"
+          git pull --rebase origin main || true
+          git push

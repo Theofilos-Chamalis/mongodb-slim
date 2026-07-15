@@ -2,36 +2,30 @@
 """
 Resolve the exact MongoDB Community + mongosh artifacts mongodb-slim should build.
 
-For each tracked major (e.g. 8.0, 7.0) it finds the latest production,
-non-release-candidate version from MongoDB's release feed, then picks a
-glibc + OpenSSL-3 "targeted" tarball that exists for BOTH x86_64 and aarch64,
-and records the official sha256 for each arch. It also resolves the latest
-mongosh (the OpenSSL-3 Linux build) and its checksums.
+By default it tracks the newest supported LTS major lines automatically: it keeps
+the newest N major numbers (N defaults to 2), and a brand-new major is only
+adopted once its x.0.0 GA release is at least 21 days old. That gives a rolling
+window, for example 8.0 + 7.0 today, then 9.0 + 8.0 about three weeks after 9.0
+ships, with 7.0 dropping out of the builds at that point. You can override the
+set explicitly with --majors "8.0 7.0" (used for manual builds).
 
-Output is a single JSON document on stdout, e.g.:
+For each tracked major it finds the latest production, non-release-candidate
+version, picks a glibc + OpenSSL-3 "targeted" tarball that exists for BOTH
+x86_64 and aarch64, and records the official sha256 for each arch. It also
+resolves the latest mongosh (the OpenSSL-3 Linux build) and its checksums.
 
-    {
-      "mongosh_version": "2.9.2",
-      "mongosh_sha256_amd64": "...",
-      "mongosh_sha256_arm64": "...",
-      "images": [
-        {
-          "version": "8.0.26", "major": "8.0", "target": "ubuntu2404",
-          "sha256_amd64": "...", "sha256_arm64": "...",
-          "mongosh_version": "2.9.2",
-          "mongosh_sha256_amd64": "...", "mongosh_sha256_arm64": "...",
-          "tags": ["8.0.26", "8.0", "8", "latest"]
-        },
-        ...
-      ]
-    }
+Output is a single JSON document on stdout (see --images-only for just the list).
 
 Usage:
-    resolve-versions.py [--majors "8.0 7.0"] [--full-json PATH] [--images-only]
+    resolve-versions.py [--majors "8.0 7.0"] [--keep-majors 2]
+                        [--new-major-min-age-days 21] [--full-json PATH]
+                        [--images-only] [--today YYYY-MM-DD]
 """
 import argparse
+import datetime
 import json
 import os
+import re
 import sys
 import urllib.request
 
@@ -61,6 +55,11 @@ def ver_tuple(v):
     return tuple(int(x) for x in v.split("."))
 
 
+def parse_feed_date(s):
+    # MongoDB's feed uses MM/DD/YYYY
+    return datetime.datetime.strptime(s, "%m/%d/%Y").date()
+
+
 def latest_for_major(feed, major):
     """major like '8.0' -> highest production, non-rc x.y.z with that prefix."""
     prefix = major + "."
@@ -71,6 +70,44 @@ def latest_for_major(feed, major):
         and e["version"].startswith(prefix)
     ]
     return max(cands, key=ver_tuple) if cands else None
+
+
+def major_ga_date(feed, major_int):
+    """GA date of {major}.0.0, else the earliest GA date in the {major}.0.x line."""
+    dot0 = f"{major_int}.0.0"
+    dates = []
+    for e in feed["versions"]:
+        v = e["version"]
+        if not e.get("production_release") or e.get("release_candidate") or not e.get("date"):
+            continue
+        if not v.startswith(f"{major_int}.0."):
+            continue
+        try:
+            d = parse_feed_date(e["date"])
+        except ValueError:
+            continue
+        if v == dot0:
+            return d
+        dates.append(d)
+    return min(dates) if dates else None
+
+
+def auto_tracked_majors(feed, keep, min_age_days, today):
+    """The newest `keep` LTS major lines, holding back a too-new newest major."""
+    majors = set()
+    for e in feed["versions"]:
+        v = e["version"]
+        if e.get("production_release") and not e.get("release_candidate") and re.match(r"^\d+\.0\.\d+$", v):
+            majors.add(int(v.split(".")[0]))
+    desc = sorted(majors, reverse=True)
+    if not desc:
+        return []
+    newest = desc[0]
+    ga = major_ga_date(feed, newest)
+    if ga is not None and (today - ga).days < min_age_days:
+        # Not adopted yet; keep tracking the previous lines until it matures.
+        desc = desc[1:]
+    return [f"{m}.0" for m in desc[:keep]]
 
 
 def archives_for_version(feed, version):
@@ -120,7 +157,7 @@ def compute_tags(images):
     """Assign version, X.Y, X and 'latest' tags across the resolved set."""
     all_versions = [ver_tuple(i["version"]) for i in images]
     global_max = max(all_versions)
-    # highest version per leading component (the "8"/"7"/"6" tag holder)
+    # highest version per leading component (holds the "8"/"7"/"9" tag)
     top_by_first = {}
     for i in images:
         first = i["version"].split(".")[0]
@@ -135,22 +172,36 @@ def compute_tags(images):
             tags.append(first)
         if vt == global_max:
             tags.append("latest")
-        # de-dup, keep order
         i["tags"] = list(dict.fromkeys(tags))
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--majors", default=os.environ.get("TRACKED_MAJORS", "8.0 7.0"))
+    ap.add_argument("--majors", default=os.environ.get("TRACKED_MAJORS", ""),
+                    help="explicit space-separated majors; blank means auto-select")
+    ap.add_argument("--keep-majors", type=int, default=int(os.environ.get("KEEP_MAJORS", "2")))
+    ap.add_argument("--new-major-min-age-days", type=int,
+                    default=int(os.environ.get("NEW_MAJOR_MIN_AGE_DAYS", "21")))
     ap.add_argument("--full-json", default=None, help="local full.json (else download)")
     ap.add_argument("--images-only", action="store_true", help="print only the images array")
+    ap.add_argument("--today", default=None, help="override today (YYYY-MM-DD), for testing")
     args = ap.parse_args()
 
     feed = load_full_json(args.full_json)
+
+    if args.majors.strip():
+        majors = args.majors.split()
+    else:
+        today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
+        majors = auto_tracked_majors(feed, args.keep_majors, args.new_major_min_age_days, today)
+        if not majors:
+            raise SystemExit("could not determine tracked majors automatically")
+    print(f"tracked majors: {' '.join(majors)}", file=sys.stderr)
+
     msh_ver, msh_amd64, msh_arm64 = resolve_mongosh()
 
     images = []
-    for major in args.majors.split():
+    for major in majors:
         version = latest_for_major(feed, major)
         if not version:
             print(f"warning: no production release found for major {major}", file=sys.stderr)
