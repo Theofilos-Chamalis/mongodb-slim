@@ -35,9 +35,9 @@ jobs:
           echo "resolved: $images"
 
           # Anonymous pull token for the public GHCR repo, then its tag list.
-          token="$(curl -fsSL "https://ghcr.io/token?scope=repository:${owner}/leanmongo:pull" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')"
+          token="$(curl -fsSL "https://ghcr.io/token?scope=repository:${owner}/mongodb-slim:pull" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')"
           published="$(curl -fsSL -H "Authorization: Bearer ${token}" \
-            "https://ghcr.io/v2/${owner}/leanmongo/tags/list" 2>/dev/null \
+            "https://ghcr.io/v2/${owner}/mongodb-slim/tags/list" 2>/dev/null \
             | python3 -c 'import sys,json;print(" ".join(json.load(sys.stdin).get("tags") or []))' || echo "")"
           echo "published tags: ${published:-<none>}"
 

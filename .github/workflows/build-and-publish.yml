@@ -90,9 +90,9 @@ jobs:
             --build-arg MONGOSH_SHA256_ARM64=${{ matrix.image.mongosh_sha256_arm64 }} \
             --cache-from type=gha,scope=${{ matrix.image.version }}-${{ matrix.arch.platform }} \
             --cache-to type=gha,mode=max,scope=${{ matrix.image.version }}-${{ matrix.arch.platform }} \
-            -t leanmongo:ci .
+            -t mongodb-slim:ci .
       - name: Smoke test (${{ matrix.arch.platform }})
-        run: ./test/smoke-test.sh leanmongo:ci ${{ matrix.image.version }}
+        run: ./test/smoke-test.sh mongodb-slim:ci ${{ matrix.image.version }}
 
   publish:
     needs: [resolve, test]
@@ -116,11 +116,11 @@ jobs:
         run: |
           set -euo pipefail
           owner="${GITHUB_REPOSITORY_OWNER,,}"
-          ghcr="ghcr.io/${owner}/leanmongo"
+          ghcr="ghcr.io/${owner}/mongodb-slim"
           dhub=""
           dockerhub_enabled=false
           if [ -n "${DOCKERHUB_NAMESPACE}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
-            dhub="docker.io/${DOCKERHUB_NAMESPACE}/leanmongo"
+            dhub="docker.io/${DOCKERHUB_NAMESPACE}/mongodb-slim"
             dockerhub_enabled=true
           fi
           refs=""
@@ -178,6 +178,6 @@ jobs:
           else
             gh release create "v$V" \
               --title "MongoDB $V" \
-              --notes "LeanMongo image for MongoDB Community Server $V (mongosh ${{ matrix.image.mongosh_version }}, base target ${{ matrix.image.target }}). Tags: ${{ join(matrix.image.tags, ', ') }}." \
+              --notes "mongodb-slim image for MongoDB Community Server $V (mongosh ${{ matrix.image.mongosh_version }}, base target ${{ matrix.image.target }}). Tags: ${{ join(matrix.image.tags, ', ') }}." \
               --target "$GITHUB_SHA"
           fi

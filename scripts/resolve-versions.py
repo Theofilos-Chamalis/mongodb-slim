@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Resolve the exact MongoDB Community + mongosh artifacts LeanMongo should build.
+Resolve the exact MongoDB Community + mongosh artifacts mongodb-slim should build.
 
-For each tracked major (e.g. 8.0, 7.0, 6.0) it finds the latest production,
+For each tracked major (e.g. 8.0, 7.0) it finds the latest production,
 non-release-candidate version from MongoDB's release feed, then picks a
 glibc + OpenSSL-3 "targeted" tarball that exists for BOTH x86_64 and aarch64,
 and records the official sha256 for each arch. It also resolves the latest
@@ -27,7 +27,7 @@ Output is a single JSON document on stdout, e.g.:
     }
 
 Usage:
-    resolve-versions.py [--majors "8.0 7.0 6.0"] [--full-json PATH] [--images-only]
+    resolve-versions.py [--majors "8.0 7.0"] [--full-json PATH] [--images-only]
 """
 import argparse
 import json
@@ -44,7 +44,7 @@ TARGET_PRIORITY = ["ubuntu2404", "ubuntu2204", "rhel93", "rhel90", "debian12"]
 
 
 def _get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "leanmongo-resolver"})
+    req = urllib.request.Request(url, headers={"User-Agent": "mongodb-slim-resolver"})
     token = os.environ.get("GITHUB_TOKEN")
     if token and "api.github.com" in url:
         req.add_header("Authorization", f"Bearer {token}")
@@ -141,7 +141,7 @@ def compute_tags(images):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--majors", default=os.environ.get("TRACKED_MAJORS", "8.0 7.0 6.0"))
+    ap.add_argument("--majors", default=os.environ.get("TRACKED_MAJORS", "8.0 7.0"))
     ap.add_argument("--full-json", default=None, help="local full.json (else download)")
     ap.add_argument("--images-only", action="store_true", help="print only the images array")
     args = ap.parse_args()

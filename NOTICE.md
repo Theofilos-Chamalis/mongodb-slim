@@ -1,6 +1,6 @@
 # NOTICE
 
-LeanMongo is an **unofficial, community-maintained** project. It is **not
+mongodb-slim is an **unofficial, community-maintained** project. It is **not
 affiliated with, sponsored by, or endorsed by MongoDB, Inc. or Chainguard, Inc.**
 
 ## Trademarks
@@ -8,7 +8,7 @@ affiliated with, sponsored by, or endorsed by MongoDB, Inc. or Chainguard, Inc.*
 MongoDB® and the leaf logo are registered trademarks of MongoDB, Inc. "Wolfi"
 and "Chainguard" are marks of Chainguard, Inc. These names are used here only
 for accurate, descriptive identification of the software being packaged.
-LeanMongo does not use their logos and does not claim any official status.
+mongodb-slim does not use their logos and does not claim any official status.
 
 ## Redistributed software
 
@@ -21,7 +21,7 @@ binaries at build time:
 | MongoDB Shell (`mongosh`) | `github.com/mongodb-js/mongosh` releases | Apache License 2.0 |
 | Base OS packages (glibc, OpenSSL, libcurl, bash, tini, su-exec, …) | Chainguard Wolfi (`packages.wolfi.dev`) | various OSI-approved (mostly Apache-2.0 / MIT / BSD) |
 
-The binaries are used as published by their vendors; LeanMongo compiles nothing
+The binaries are used as published by their vendors; mongodb-slim compiles nothing
 and patches nothing. Each binary is verified against a vendor-published SHA-256
 checksum at build time.
 

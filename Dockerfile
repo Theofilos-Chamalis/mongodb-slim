@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# LeanMongo — MongoDB Community Server on Chainguard Wolfi (glibc)
+# mongodb-slim — MongoDB Community Server on Chainguard Wolfi (glibc)
 #
 # MongoDB does not ship musl/Alpine or apk builds of the server, but it does ship
 # glibc binary tarballs. Wolfi is a minimal, glibc-based, apk-driven "undistro",
@@ -114,12 +114,12 @@ RUN set -eux; \
     mongos --version; \
     mongosh --version
 
-LABEL org.opencontainers.image.title="LeanMongo" \
+LABEL org.opencontainers.image.title="mongodb-slim" \
       org.opencontainers.image.description="Lean, secure, multi-arch MongoDB Community Server on Chainguard Wolfi (glibc). Drop-in compatible with the official mongo image." \
       org.opencontainers.image.version="${MONGO_VERSION}" \
-      org.opencontainers.image.vendor="LeanMongo (community project, not affiliated with MongoDB, Inc.)" \
+      org.opencontainers.image.vendor="mongodb-slim (community project, not affiliated with MongoDB, Inc.)" \
       org.opencontainers.image.licenses="SSPL-1.0" \
-      org.leanmongo.mongosh.version="${MONGOSH_VERSION}"
+      org.mongodb-slim.mongosh.version="${MONGOSH_VERSION}"
 
 VOLUME /data/db
 EXPOSE 27017

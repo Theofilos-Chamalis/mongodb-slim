@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# End-to-end smoke test for a LeanMongo image.
+# End-to-end smoke test for a mongodb-slim image.
 # Usage: test/smoke-test.sh <image> [expected_mongo_version]
 #
 # Exercises the behaviours users actually depend on and that determine parity
@@ -29,7 +29,7 @@ bad()  { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
 # mongosh run inside the container (no host mongosh needed)
 msh() { docker exec "$CID" mongosh --quiet "$@"; }
 
-echo "== LeanMongo smoke test =="
+echo "== mongodb-slim smoke test =="
 echo "image: $IMAGE"
 
 # An init script that must run exactly once, on first startup.

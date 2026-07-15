@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# LeanMongo entrypoint — behaviourally compatible with the official `mongo`
+# mongodb-slim entrypoint — behaviourally compatible with the official `mongo`
 # image (docker-library/mongo). Supports:
 #   - MONGO_INITDB_ROOT_USERNAME / _PASSWORD  (+ *_FILE secret variants)
 #   - MONGO_INITDB_DATABASE
@@ -99,7 +99,7 @@ fi
 # --- first-run initialization ---------------------------------------------
 
 if [ -n "$needInit" ]; then
-	echo "LeanMongo: initializing fresh dbPath ${dbPath}"
+	echo "mongodb-slim: initializing fresh dbPath ${dbPath}"
 
 	tempPort=27017
 	# Build temp-server args from the user's, minus networking/auth flags that
@@ -124,7 +124,7 @@ if [ -n "$needInit" ]; then
 
 	# Bootstrap the root user (server is unauthenticated at this point).
 	if [ -n "${MONGO_INITDB_ROOT_USERNAME:-}" ] && [ -n "${MONGO_INITDB_ROOT_PASSWORD:-}" ]; then
-		echo "LeanMongo: creating root user '${MONGO_INITDB_ROOT_USERNAME}'"
+		echo "mongodb-slim: creating root user '${MONGO_INITDB_ROOT_USERNAME}'"
 		MONGO_INITDB_ROOT_USERNAME="$MONGO_INITDB_ROOT_USERNAME" \
 		MONGO_INITDB_ROOT_PASSWORD="$MONGO_INITDB_ROOT_PASSWORD" \
 		mongosh --quiet --host "127.0.0.1:${tempPort}" admin --eval '
@@ -143,26 +143,26 @@ if [ -n "$needInit" ]; then
 			[ -e "$f" ] || continue
 			case "$f" in
 				*.sh)
-					echo "LeanMongo: running $f"
+					echo "mongodb-slim: running $f"
 					# shellcheck disable=SC1090
 					. "$f"
 					;;
 				*.js)
-					echo "LeanMongo: running $f"
+					echo "mongodb-slim: running $f"
 					mongosh --quiet --host "127.0.0.1:${tempPort}" "$initDb" "$f"
 					;;
 				*)
-					echo "LeanMongo: ignoring $f"
+					echo "mongodb-slim: ignoring $f"
 					;;
 			esac
 		done
 	fi
 
 	# Cleanly stop the temporary server.
-	echo "LeanMongo: stopping temporary server"
+	echo "mongodb-slim: stopping temporary server"
 	mongosh --quiet --host "127.0.0.1:${tempPort}" admin --eval 'db.shutdownServer()' >/dev/null 2>&1 || true
 	wait "$tempPid" 2>/dev/null || true
-	echo "LeanMongo: initialization complete"
+	echo "mongodb-slim: initialization complete"
 fi
 
 # --- enable auth on the real server if we bootstrapped a user --------------

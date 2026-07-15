@@ -1,10 +1,10 @@
-# LeanMongo 🍃
+# mongodb-slim 🍃
 
 **Lean, secure, multi-arch MongoDB Community Server on [Chainguard Wolfi](https://github.com/wolfi-dev) (glibc).**
 A drop-in-compatible alternative to the official `mongo` image — smaller, hardened, and published for **every** MongoDB version, free.
 
-[![build-and-publish](https://github.com/OWNER/leanmongo/actions/workflows/build-and-publish.yml/badge.svg)](https://github.com/OWNER/leanmongo/actions/workflows/build-and-publish.yml)
-[![watch-upstream](https://github.com/OWNER/leanmongo/actions/workflows/watch-upstream.yml/badge.svg)](https://github.com/OWNER/leanmongo/actions/workflows/watch-upstream.yml)
+[![build-and-publish](https://github.com/OWNER/mongodb-slim/actions/workflows/build-and-publish.yml/badge.svg)](https://github.com/OWNER/mongodb-slim/actions/workflows/build-and-publish.yml)
+[![watch-upstream](https://github.com/OWNER/mongodb-slim/actions/workflows/watch-upstream.yml/badge.svg)](https://github.com/OWNER/mongodb-slim/actions/workflows/watch-upstream.yml)
 
 > **Unofficial community project.** Not affiliated with or endorsed by MongoDB, Inc. or Chainguard. MongoDB® is a trademark of MongoDB, Inc. This project only repackages MongoDB's official, unmodified server binaries. See [NOTICE.md](NOTICE.md).
 
@@ -14,7 +14,7 @@ A drop-in-compatible alternative to the official `mongo` image — smaller, hard
 
 MongoDB doesn't ship a musl/Alpine build, so "MongoDB on Alpine" usually means compiling from source or bolting a glibc shim onto Alpine. **Wolfi** sidesteps all of that: it's a minimal, `apk`-based, **glibc** undistro, so MongoDB's official glibc binaries run natively — no compilation, no shim.
 
-| | LeanMongo | official `mongo` | `chainguard/mongodb` |
+| | mongodb-slim | official `mongo` | `chainguard/mongodb` |
 |---|---|---|---|
 | Base | Wolfi (glibc) | Ubuntu | Wolfi (glibc) |
 | Image size (uncompressed) | ~815 MB | ~1.1 GB | small |
@@ -32,7 +32,7 @@ docker run -d --name mongo -p 27017:27017 \
   -e MONGO_INITDB_ROOT_USERNAME=root \
   -e MONGO_INITDB_ROOT_PASSWORD=change-me \
   -v mongo-data:/data/db \
-  ghcr.io/OWNER/leanmongo:8
+  ghcr.io/OWNER/mongodb-slim:8
 
 # connect
 docker exec -it mongo mongosh -u root -p change-me
@@ -43,7 +43,7 @@ docker exec -it mongo mongosh -u root -p change-me
 ```yaml
 services:
   mongo:
-    image: ghcr.io/OWNER/leanmongo:8
+    image: ghcr.io/OWNER/mongodb-slim:8
     restart: unless-stopped
     ports: ["27017:27017"]
     environment:
@@ -60,17 +60,17 @@ secrets:
 
 Published to **GHCR** (always) and **Docker Hub** (when configured):
 
-- `ghcr.io/OWNER/leanmongo:<tag>`
-- `docker.io/DOCKERHUB_NS/leanmongo:<tag>`
+- `ghcr.io/OWNER/mongodb-slim:<tag>`
+- `docker.io/DOCKERHUB_NS/mongodb-slim:<tag>`
 
 | Tag | Points to |
 |---|---|
 | `latest` | newest tracked release (currently 8.0.x) |
-| `8`, `7`, `6` | newest release in that major |
-| `8.0`, `7.0`, `6.0` | newest patch in that minor |
+| `8`, `7` | newest release in that major |
+| `8.0`, `7.0` | newest patch in that minor |
 | `8.0.26`, `7.0.37`, … | exact, immutable version |
 
-Tracked majors are configured in the workflows (`TRACKED_MAJORS`, default `8.0 7.0 6.0`).
+Tracked majors are the currently-supported MongoDB LTS lines, configured via `TRACKED_MAJORS` (default `8.0 7.0`). MongoDB 6.0 and older are end-of-life and are intentionally not published.
 
 ## Configuration (compatible with the official image)
 
@@ -87,7 +87,7 @@ On **first** start with an empty `/data/db`, scripts in `/docker-entrypoint-init
 Everything after the image name is passed straight to `mongod`, e.g.:
 
 ```bash
-docker run ghcr.io/OWNER/leanmongo:8 mongod --replSet rs0 --bind_ip_all
+docker run ghcr.io/OWNER/mongodb-slim:8 mongod --replSet rs0 --bind_ip_all
 ```
 
 ## Security posture
@@ -116,18 +116,18 @@ Every `(version, architecture)` pair is built **natively** (amd64 on `ubuntu-lat
 Run it locally against any tag:
 
 ```bash
-docker build -t leanmongo:test .
-./test/smoke-test.sh leanmongo:test 8.0.26
+docker build -t mongodb-slim:test .
+./test/smoke-test.sh mongodb-slim:test 8.0.26
 ```
 
 ## Building locally
 
 ```bash
 # amd64
-docker buildx build --load -t leanmongo:test .
+docker buildx build --load -t mongodb-slim:test .
 
 # a specific version (see scripts/resolve-versions.py for checksums)
-docker buildx build --load -t leanmongo:7 \
+docker buildx build --load -t mongodb-slim:7 \
   --build-arg MONGO_VERSION=7.0.37 \
   --build-arg MONGO_TARGET=ubuntu2204 \
   --build-arg MONGO_SHA256_AMD64=... \
