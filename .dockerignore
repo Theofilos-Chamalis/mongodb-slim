@@ -1,0 +1,4 @@
+# Keep the build context tiny — the build only needs the Dockerfile and entrypoint.
+*
+!Dockerfile
+!docker-entrypoint.sh

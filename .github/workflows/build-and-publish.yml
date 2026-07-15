@@ -1,0 +1,183 @@
+name: build-and-publish
+
+# Builds every tracked MongoDB major as a multi-arch (amd64 + arm64) image,
+# smoke-tests each arch natively, then publishes to GHCR (always) and Docker Hub
+# (when configured). Runs on push to main, weekly (to absorb Wolfi security
+# updates), on manual dispatch, and when the watcher finds a new upstream release.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - docker-entrypoint.sh
+      - scripts/**
+      - test/**
+      - .github/workflows/build-and-publish.yml
+  pull_request:
+    paths:
+      - Dockerfile
+      - docker-entrypoint.sh
+      - scripts/**
+      - test/**
+      - .github/workflows/build-and-publish.yml
+  schedule:
+    - cron: "17 4 * * 1"      # Mondays 04:17 UTC — refresh for base-image CVEs
+  workflow_dispatch:
+    inputs:
+      majors:
+        description: "Space-separated MongoDB majors to build (e.g. '8.0 7.0')"
+        required: false
+        default: ""
+  repository_dispatch:
+    types: [upstream-update]
+
+concurrency:
+  group: build-and-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write        # create version tags / releases
+  packages: write        # push to GHCR
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.r.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - id: r
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MAJORS: ${{ github.event.inputs.majors || github.event.client_payload.majors || '' }}
+        run: |
+          set -euo pipefail
+          if [ -n "$MAJORS" ]; then
+            matrix="$(python3 scripts/resolve-versions.py --majors "$MAJORS" --images-only)"
+          else
+            matrix="$(python3 scripts/resolve-versions.py --images-only)"
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Resolved:"; echo "$matrix" | python3 -m json.tool
+
+  test:
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJson(needs.resolve.outputs.matrix) }}
+        arch:
+          - { platform: amd64, runner: ubuntu-latest }
+          - { platform: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.arch.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build (${{ matrix.arch.platform }}) MongoDB ${{ matrix.image.version }}
+        run: |
+          docker buildx build --load \
+            --platform linux/${{ matrix.arch.platform }} \
+            --build-arg MONGO_VERSION=${{ matrix.image.version }} \
+            --build-arg MONGO_TARGET=${{ matrix.image.target }} \
+            --build-arg MONGO_SHA256_AMD64=${{ matrix.image.sha256_amd64 }} \
+            --build-arg MONGO_SHA256_ARM64=${{ matrix.image.sha256_arm64 }} \
+            --build-arg MONGOSH_VERSION=${{ matrix.image.mongosh_version }} \
+            --build-arg MONGOSH_SHA256_AMD64=${{ matrix.image.mongosh_sha256_amd64 }} \
+            --build-arg MONGOSH_SHA256_ARM64=${{ matrix.image.mongosh_sha256_arm64 }} \
+            --cache-from type=gha,scope=${{ matrix.image.version }}-${{ matrix.arch.platform }} \
+            --cache-to type=gha,mode=max,scope=${{ matrix.image.version }}-${{ matrix.arch.platform }} \
+            -t leanmongo:ci .
+      - name: Smoke test (${{ matrix.arch.platform }})
+        run: ./test/smoke-test.sh leanmongo:ci ${{ matrix.image.version }}
+
+  publish:
+    needs: [resolve, test]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJson(needs.resolve.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Compute image references + registries
+        id: cfg
+        env:
+          DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          TAGS: ${{ join(matrix.image.tags, ' ') }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          ghcr="ghcr.io/${owner}/leanmongo"
+          dhub=""
+          dockerhub_enabled=false
+          if [ -n "${DOCKERHUB_NAMESPACE}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
+            dhub="docker.io/${DOCKERHUB_NAMESPACE}/leanmongo"
+            dockerhub_enabled=true
+          fi
+          refs=""
+          for t in $TAGS; do
+            refs="${refs}${ghcr}:${t}"$'\n'
+            [ "$dockerhub_enabled" = true ] && refs="${refs}${dhub}:${t}"$'\n'
+          done
+          {
+            echo "dockerhub_enabled=${dockerhub_enabled}"
+            echo "refs<<EOF"; printf '%s' "$refs"; echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Log in to Docker Hub
+        if: steps.cfg.outputs.dockerhub_enabled == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build + push (amd64 + arm64) MongoDB ${{ matrix.image.version }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: true
+          sbom: true
+          tags: ${{ steps.cfg.outputs.refs }}
+          build-args: |
+            MONGO_VERSION=${{ matrix.image.version }}
+            MONGO_TARGET=${{ matrix.image.target }}
+            MONGO_SHA256_AMD64=${{ matrix.image.sha256_amd64 }}
+            MONGO_SHA256_ARM64=${{ matrix.image.sha256_arm64 }}
+            MONGOSH_VERSION=${{ matrix.image.mongosh_version }}
+            MONGOSH_SHA256_AMD64=${{ matrix.image.mongosh_sha256_amd64 }}
+            MONGOSH_SHA256_ARM64=${{ matrix.image.mongosh_sha256_arm64 }}
+          cache-from: type=gha,scope=${{ matrix.image.version }}-multi
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.version }}-multi
+
+      - name: Tag release v${{ matrix.image.version }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ matrix.image.version }}
+        run: |
+          set -euo pipefail
+          if gh release view "v$V" >/dev/null 2>&1; then
+            echo "release v$V already exists — skipping"
+          else
+            gh release create "v$V" \
+              --title "MongoDB $V" \
+              --notes "LeanMongo image for MongoDB Community Server $V (mongosh ${{ matrix.image.mongosh_version }}, base target ${{ matrix.image.target }}). Tags: ${{ join(matrix.image.tags, ', ') }}." \
+              --target "$GITHUB_SHA"
+          fi

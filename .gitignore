@@ -1,0 +1,11 @@
+# build/test scratch
+*.tgz
+full.json
+APKINDEX*
+/tmp/
+
+# editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
