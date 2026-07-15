@@ -59,7 +59,10 @@ RUN set -eux; \
     echo "${mongo_sha}  mongo.tgz" | sha256sum -c -; \
     mkdir -p /work/server; \
     tar -xzf mongo.tgz -C /work/server; \
-    cp /work/server/mongodb-linux-*/bin/mongod /work/server/mongodb-linux-*/bin/mongos /rootfs/usr/local/bin/; \
+    # We ship mongod only. mongos is the sharded-cluster router, which nobody
+    # runs from a single-container image, and leaving it out keeps this the
+    # leanest MongoDB image around.
+    cp /work/server/mongodb-linux-*/bin/mongod /rootfs/usr/local/bin/; \
     \
     sh_url="https://github.com/mongodb-js/mongosh/releases/download/v${MONGOSH_VERSION}/mongosh-${MONGOSH_VERSION}-linux-${sh_arch}-openssl3.tgz"; \
     echo "==> mongosh: ${sh_url}"; \
@@ -114,7 +117,6 @@ RUN set -eux; \
     chmod 0755 /usr/local/bin/docker-entrypoint.sh; \
     ln -s /usr/local/bin/docker-entrypoint.sh /docker-entrypoint.sh; \
     mongod --version; \
-    mongos --version; \
     mongosh --version
 
 LABEL org.opencontainers.image.title="mongodb-slim" \
@@ -131,6 +133,8 @@ EXPOSE 27017
 HEALTHCHECK --interval=10s --timeout=5s --start-period=45s --retries=6 \
   CMD mongosh --quiet --host 127.0.0.1 --eval "db.adminCommand('ping').ok" | grep -q 1 || exit 1
 
-# tini reaps zombies and forwards signals; entrypoint mirrors the official image
+# tini is PID 1 so signals and zombie processes are handled properly. The
+# entrypoint behaves like the official mongo image, including adding
+# --bind_ip_all when you don't set your own bind option, so CMD is just mongod.
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]
-CMD ["mongod", "--bind_ip_all"]
+CMD ["mongod"]

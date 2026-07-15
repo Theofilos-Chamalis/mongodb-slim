@@ -1,6 +1,6 @@
 # mongodb-slim
 
-A small, multi-arch MongoDB Community Server image built on [Chainguard Wolfi](https://github.com/wolfi-dev). It runs MongoDB's official binaries, works on both x86_64 and arm64, and behaves like the official `mongo` image so you can swap it in without changing anything.
+The leanest maintained MongoDB Community Server image on Docker Hub, built on [Chainguard Wolfi](https://github.com/wolfi-dev). It runs MongoDB's official binaries, works on both x86_64 and arm64, and behaves like the official `mongo` image, so you can drop it in without changing anything.
 
 [![build-and-publish](https://github.com/OWNER/mongodb-slim/actions/workflows/build-and-publish.yml/badge.svg)](https://github.com/OWNER/mongodb-slim/actions/workflows/build-and-publish.yml)
 
@@ -12,19 +12,21 @@ MongoDB doesn't publish an Alpine build, because the server isn't built for musl
 
 Wolfi avoids the whole problem. It's a minimal, apk-based distro that uses glibc, so MongoDB's official glibc binaries just run. Nothing is compiled, nothing is patched, and there's no shim in the way.
 
-## How small is it, really
+## How small is it
 
-Here are the compressed sizes (the number you actually download), pulled from Docker Hub:
+These are the compressed sizes, the number you actually download, measured from Docker Hub:
 
-| Image | Compressed size | Notes |
-|---|---|---|
-| **mongodb-slim** | **~184 MB** | bundles `mongosh`, official-compatible entrypoint |
-| chainguard/mongodb | ~184 MB | no `mongosh`, no init-script entrypoint |
-| bitnami/mongodb | ~269 MB | |
-| mongodb/mongodb-community-server | ~330 MB | |
-| official `mongo` | ~337 MB | |
+| Image | Compressed size |
+|---|---|
+| **mongodb-slim** | **~138 MB** |
+| chainguard/mongodb | ~184 MB |
+| bitnami/mongodb | ~269 MB |
+| mongodb/mongodb-community-server | ~330 MB |
+| official `mongo` | ~337 MB |
 
-So it's roughly half the size of the official image, and as small as the smallest mainstream option while still shipping `mongosh` and staying drop-in compatible. It is not the tiniest MongoDB image in existence (there are ancient 3.x or stripped-down community images that are smaller), but among current, maintained, multi-arch images it's about as lean as it gets.
+That makes it the leanest maintained MongoDB image we could find: smaller than every mainstream option, including Chainguard's, and about 40% of the size of the official `mongo` image. It gets there by building on Wolfi, keeping only the libraries `mongod` actually links against, and shipping just `mongod` and `mongosh` (no `mongos` sharding router, which a single-container setup never uses).
+
+To be straight about it: this is not the tiniest MongoDB image that has ever existed. There are ancient 3.x and stripped-down community builds that are smaller. But among current, maintained, multi-arch images, nothing we compared beats it, and it does that without giving up `mongosh` or official-image compatibility.
 
 ## Quick start
 
@@ -84,11 +86,29 @@ These match the official image, so existing setups keep working:
 
 The first time the container starts with an empty `/data/db`, anything in `/docker-entrypoint-initdb.d` runs once. `.js` files run through `mongosh` and `.sh` files are sourced. Mount them read-only and make sure they're world-readable, since the server runs as uid 999. There's a working example in [`examples/`](examples/).
 
-Anything you put after the image name is passed straight to `mongod`:
+Anything you put after the image name is passed straight to `mongod` (and the entrypoint still adds `--bind_ip_all` for you, so this stays reachable):
 
 ```bash
-docker run ghcr.io/OWNER/mongodb-slim:8 mongod --replSet rs0 --bind_ip_all
+docker run ghcr.io/OWNER/mongodb-slim:8 mongod --replSet rs0
 ```
+
+## Migrating from the official image
+
+This is meant to be a straight swap. Point your `image:` at `mongodb-slim`, leave everything else alone, and it should just work. The parts people depend on behave the same:
+
+- **Same environment variables:** `MONGO_INITDB_ROOT_USERNAME`, `MONGO_INITDB_ROOT_PASSWORD`, `MONGO_INITDB_DATABASE`, plus the `_FILE` forms of the two credentials for Docker or Kubernetes secrets.
+- **Same init directory:** `/docker-entrypoint-initdb.d`, with `.js` files run through `mongosh` and `.sh` files sourced, on the first start only.
+- **Same auth behavior:** creating a root user from those variables turns on `--auth`, exactly like upstream.
+- **Same networking:** `--bind_ip_all` is added for you unless you set your own bind option, so `docker run -p 27017:27017` works even when you override the command (for example `mongod --replSet rs0`).
+- **Same command handling:** arguments after the image name go straight to `mongod`, and non-mongod commands like `mongosh` or `bash` run as-is.
+- **Same layout:** data lives in `/data/db`, it listens on 27017, and it runs as a non-root user.
+
+Each of these is checked on every build, on both amd64 and arm64, by [`test/smoke-test.sh`](test/smoke-test.sh), so they don't quietly regress.
+
+Two differences worth knowing about:
+
+- There is no `mongos` (the sharding-cluster router). A single-container deployment never runs it. If you specifically need a `mongos` node, run it from the official image.
+- Bind address and dbPath are read from command-line flags, not from a YAML file passed with `--config`. If you use a config file that sets `net.bindIp` or `storage.dbPath`, pass those as flags too. `numactl` is also not used.
 
 ## Security
 
@@ -111,7 +131,7 @@ On startup you may see `mongod: /usr/lib/libcurl.so.4: no version information av
 
 ## How it's tested
 
-Nothing gets published until it passes. Every version is built for both amd64 (on `ubuntu-latest`) and arm64 (on `ubuntu-24.04-arm`), natively, and run through [`test/smoke-test.sh`](test/smoke-test.sh). That checks a real container: it starts and goes healthy, reports the right version, runs as a non-root user, has clean library linkage, uses OpenSSL 3 and WiredTiger, enforces auth, does authenticated reads and writes, runs init scripts, and keeps its data across a restart.
+Nothing gets published until it passes. Every version is built for both amd64 (on `ubuntu-latest`) and arm64 (on `ubuntu-24.04-arm`), natively, and run through [`test/smoke-test.sh`](test/smoke-test.sh). It exercises a real container end to end: it starts and goes healthy, reports the right version, runs as a non-root user, has clean library linkage, uses OpenSSL 3 and WiredTiger, and keeps its data across a restart. It also covers the official-image behaviors that make migration safe: enforced auth, authenticated reads and writes, both `.js` and `.sh` init scripts, `_FILE` secrets, automatic `--bind_ip_all`, and non-mongod command passthrough.
 
 You can run the same test yourself:
 

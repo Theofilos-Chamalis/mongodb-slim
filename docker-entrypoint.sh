@@ -166,13 +166,21 @@ if [ -n "$needInit" ]; then
 	echo "mongodb-slim: initialization complete"
 fi
 
-# If we created a root user, start the real server with auth turned on.
+# Final tweaks to the mongod arguments, matching the official image.
+if [ "$originalArgOne" = 'mongod' ]; then
+	# If we created a root user, turn on auth (unless the user set it themselves).
+	if [ -n "${MONGO_INITDB_ROOT_USERNAME:-}" ] \
+		&& ! _have_arg --auth "$@" \
+		&& ! _have_arg --noauth "$@"; then
+		set -- "$@" --auth
+	fi
 
-if [ "$originalArgOne" = 'mongod' ] \
-	&& [ -n "${MONGO_INITDB_ROOT_USERNAME:-}" ] \
-	&& ! _have_arg --auth "$@" \
-	&& ! _have_arg --noauth "$@"; then
-	set -- "$@" --auth
+	# Listen on all interfaces so the container is reachable through a published
+	# port, unless the user picked their own bind option. This is what the
+	# official image does, and it's why plain `docker run -p 27017:27017` works.
+	if ! _have_arg --bind_ip "$@" && ! _have_arg --bind_ip_all "$@"; then
+		set -- "$@" --bind_ip_all
+	fi
 fi
 
 exec "$@"

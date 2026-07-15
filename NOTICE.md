@@ -17,7 +17,7 @@ binaries at build time:
 
 | Component | Source | License |
 |---|---|---|
-| MongoDB Community Server (`mongod`, `mongos`) | `fastdl.mongodb.org` (official release tarballs) | Server Side Public License v1 (SSPL-1.0) |
+| MongoDB Community Server (`mongod`) | `fastdl.mongodb.org` (official release tarballs) | Server Side Public License v1 (SSPL-1.0) |
 | MongoDB Shell (`mongosh`) | `github.com/mongodb-js/mongosh` releases | Apache License 2.0 |
 | Base OS packages (glibc, OpenSSL, libcurl, bash, tini, su-exec, …) | Chainguard Wolfi (`packages.wolfi.dev`) | various OSI-approved (mostly Apache-2.0 / MIT / BSD) |
 
