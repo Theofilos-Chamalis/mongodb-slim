@@ -269,6 +269,9 @@ jobs:
           DHUB: ${{ steps.cfg.outputs.dhub }}
         run: |
           set -euo pipefail
+          # Registry timestamps have one-second granularity; wait a moment so
+          # these tags land strictly after the publish jobs' pushes.
+          sleep 10
           read -ra tagarr <<< "$TAGS"
           for reg in "$GHCR" "$DHUB"; do
             [ -z "$reg" ] && continue
