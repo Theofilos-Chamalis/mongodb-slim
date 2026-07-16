@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Keep the GitHub Actions we use current (opens a PR when a new version ships).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
