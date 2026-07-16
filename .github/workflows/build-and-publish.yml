@@ -104,20 +104,26 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
-      - name: Build (${{ matrix.arch.platform }}) MongoDB ${{ matrix.image.version }}
-        run: |
-          docker buildx build --load \
-            --platform linux/${{ matrix.arch.platform }} \
-            --build-arg MONGO_VERSION=${{ matrix.image.version }} \
-            --build-arg MONGO_TARGET=${{ matrix.image.target }} \
-            --build-arg MONGO_SHA256_AMD64=${{ matrix.image.sha256_amd64 }} \
-            --build-arg MONGO_SHA256_ARM64=${{ matrix.image.sha256_arm64 }} \
-            --build-arg MONGOSH_VERSION=${{ matrix.image.mongosh_version }} \
-            --build-arg MONGOSH_SHA256_AMD64=${{ matrix.image.mongosh_sha256_amd64 }} \
-            --build-arg MONGOSH_SHA256_ARM64=${{ matrix.image.mongosh_sha256_arm64 }} \
-            --cache-from type=gha,scope=${{ matrix.image.version }}-${{ matrix.arch.platform }} \
-            --cache-to type=gha,mode=max,scope=${{ matrix.image.version }}-${{ matrix.arch.platform }} \
-            -t mongodb-slim:ci .
+      # Build with build-push-action (not raw buildx) so the gha cache is
+      # actually exported. The publish job then reuses these per-arch layers,
+      # which turns its arm64 build from a QEMU rebuild into a cache hit.
+      - name: Build ${{ matrix.arch.platform }} image for testing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          platforms: linux/${{ matrix.arch.platform }}
+          tags: mongodb-slim:ci
+          build-args: |
+            MONGO_VERSION=${{ matrix.image.version }}
+            MONGO_TARGET=${{ matrix.image.target }}
+            MONGO_SHA256_AMD64=${{ matrix.image.sha256_amd64 }}
+            MONGO_SHA256_ARM64=${{ matrix.image.sha256_arm64 }}
+            MONGOSH_VERSION=${{ matrix.image.mongosh_version }}
+            MONGOSH_SHA256_AMD64=${{ matrix.image.mongosh_sha256_amd64 }}
+            MONGOSH_SHA256_ARM64=${{ matrix.image.mongosh_sha256_arm64 }}
+          cache-from: type=gha,scope=${{ matrix.image.version }}-${{ matrix.arch.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.version }}-${{ matrix.arch.platform }}
       - name: Smoke test (${{ matrix.arch.platform }})
         run: ./test/smoke-test.sh mongodb-slim:ci ${{ matrix.image.version }}
 
