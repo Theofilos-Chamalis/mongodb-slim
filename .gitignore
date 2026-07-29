@@ -9,3 +9,7 @@ APKINDEX*
 *.swp
 .idea/
 .vscode/
+
+# python bytecode
+__pycache__/
+*.pyc

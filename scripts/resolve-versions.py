@@ -60,8 +60,13 @@ def parse_feed_date(s):
     return datetime.datetime.strptime(s, "%m/%d/%Y").date()
 
 
-def latest_for_major(feed, major):
-    """major like '8.0' -> highest production, non-rc x.y.z with that prefix."""
+def candidates_for_major(feed, major):
+    """major like '8.0' -> its production, non-rc versions, newest first.
+
+    MongoDB sometimes lists a release in the feed before its binaries are
+    published, with an empty downloads array. Returning every candidate lets
+    the caller fall back to the newest one that actually has artifacts.
+    """
     prefix = major + "."
     cands = [
         e["version"]
@@ -69,7 +74,7 @@ def latest_for_major(feed, major):
         if e.get("production_release") and not e.get("release_candidate")
         and e["version"].startswith(prefix)
     ]
-    return max(cands, key=ver_tuple) if cands else None
+    return sorted(set(cands), key=ver_tuple, reverse=True)
 
 
 def major_ga_date(feed, major_int):
@@ -202,13 +207,23 @@ def main():
 
     images = []
     for major in majors:
-        version = latest_for_major(feed, major)
-        if not version:
+        cands = candidates_for_major(feed, major)
+        if not cands:
             print(f"warning: no production release found for major {major}", file=sys.stderr)
             continue
-        target, sha_amd64, sha_arm64 = pick_target(archives_for_version(feed, version))
-        if not target:
-            print(f"warning: no dual-arch OpenSSL-3 target for {version}", file=sys.stderr)
+        # Walk newest to oldest and take the first release that actually has
+        # dual-arch OpenSSL-3 tarballs. A release whose binaries are not out yet
+        # is skipped rather than failing the whole run.
+        version = target = sha_amd64 = sha_arm64 = None
+        for cand in cands:
+            target, sha_amd64, sha_arm64 = pick_target(archives_for_version(feed, cand))
+            if target:
+                version = cand
+                break
+            print(f"note: skipping {cand}, no dual-arch OpenSSL-3 tarballs published yet",
+                  file=sys.stderr)
+        if not version:
+            print(f"warning: no usable release found for major {major}", file=sys.stderr)
             continue
         images.append({
             "version": version,
