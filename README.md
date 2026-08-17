@@ -61,7 +61,7 @@ secrets:
 ## Images and tags
 
 <!-- current-versions:start -->
-**Currently published:** MongoDB `8.0.28` and `7.0.39`, with `mongosh 2.9.2`. Last refreshed 2026-07-27.
+**Currently published:** MongoDB `8.0.29` and `7.0.40`, with `mongosh 2.10.0`. Last refreshed 2026-08-17.
 <!-- current-versions:end -->
 
 Everything is published to GHCR, and to Docker Hub once that's configured:
