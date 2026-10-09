@@ -33,6 +33,9 @@ bad() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
 
 # mongosh, run inside the main container so we don't need it on the host
 msh() { docker exec "$CID" mongosh --quiet "$@"; }
+# Authenticated mongosh. Required for buildInfo-backed helpers (db.version(),
+# db.serverBuildInfo(), …) on MongoDB 8.1+/9.x when --auth is enabled.
+msh_auth() { msh -u root -p trustno1 --authenticationDatabase admin "$@"; }
 
 wait_healthy() {
 	local cid="$1"
@@ -77,8 +80,8 @@ CID="$(docker run -d \
 echo "-- waiting for health --"
 wait_healthy "$CID" 90 && ok "container reached healthy state" || bad "container never became healthy"
 
-# version
-ver="$(msh --host 127.0.0.1 --eval 'db.version()' | tr -d '\r')"
+# version (buildInfo requires auth on MongoDB 8.1+/9.x)
+ver="$(msh_auth --host 127.0.0.1 --eval 'db.version()' | tr -d '\r')"
 if [ -n "$EXPECTED_VERSION" ]; then
 	[ "$ver" = "$EXPECTED_VERSION" ] && ok "server version $ver == expected" || bad "version $ver != expected $EXPECTED_VERSION"
 else
@@ -96,12 +99,12 @@ else
 	bad "mongod or mongosh failed to execute"
 fi
 
-# OpenSSL 3, so TLS is available
-ssl="$(msh --host 127.0.0.1 --eval 'db.serverBuildInfo().openssl.running' | tr -d '\r')"
+# OpenSSL 3, so TLS is available (also via buildInfo → needs auth)
+ssl="$(msh_auth --host 127.0.0.1 --eval 'db.serverBuildInfo().openssl.running' | tr -d '\r')"
 echo "$ssl" | grep -qi 'OpenSSL 3' && ok "linked against OpenSSL 3 ($ssl)" || bad "unexpected OpenSSL: '$ssl'"
 
 # storage engine
-se="$(msh --host 127.0.0.1 -u root -p trustno1 --authenticationDatabase admin --eval 'db.serverStatus().storageEngine.name' | tr -d '\r')"
+se="$(msh_auth --host 127.0.0.1 --eval 'db.serverStatus().storageEngine.name' | tr -d '\r')"
 [ "$se" = "wiredTiger" ] && ok "storage engine is wiredTiger" || bad "storage engine is '$se'"
 
 # auth is enforced: an unauthenticated write must fail
@@ -112,7 +115,7 @@ else
 fi
 
 # authenticated reads and writes work
-if msh --host 127.0.0.1 -u root -p trustno1 --authenticationDatabase admin \
+if msh_auth --host 127.0.0.1 \
 	--eval 'db.getSiblingDB("appdb").probe.insertOne({ok:1}); print(db.getSiblingDB("appdb").probe.countDocuments())' | grep -q 1; then
 	ok "authenticated CRUD works"
 else
@@ -120,15 +123,15 @@ else
 fi
 
 # the .js init script ran
-jcnt="$(msh --host 127.0.0.1 -u root -p trustno1 --authenticationDatabase admin --eval 'db.getSiblingDB("appdb").widgets.countDocuments()' | tr -d '\r')"
+jcnt="$(msh_auth --host 127.0.0.1 --eval 'db.getSiblingDB("appdb").widgets.countDocuments()' | tr -d '\r')"
 [ "$jcnt" = "2" ] && ok ".js init script ran (2 seeded docs)" || bad "expected 2 docs from seed.js, got '$jcnt'"
 
 # the .sh init script ran
-scnt="$(msh --host 127.0.0.1 -u root -p trustno1 --authenticationDatabase admin --eval 'db.getSiblingDB("appdb").fromsh.countDocuments()' | tr -d '\r')"
+scnt="$(msh_auth --host 127.0.0.1 --eval 'db.getSiblingDB("appdb").fromsh.countDocuments()' | tr -d '\r')"
 [ "$scnt" = "1" ] && ok ".sh init script ran (1 doc)" || bad "expected 1 doc from seed.sh, got '$scnt'"
 
 # the entrypoint added --bind_ip_all, like the official image
-argv="$(msh --host 127.0.0.1 -u root -p trustno1 --authenticationDatabase admin --eval 'db.adminCommand({getCmdLineOpts:1}).argv.join(" ")')"
+argv="$(msh_auth --host 127.0.0.1 --eval 'db.adminCommand({getCmdLineOpts:1}).argv.join(" ")')"
 echo "$argv" | grep -q -- '--bind_ip_all' && ok "entrypoint added --bind_ip_all (reachable via published port)" || bad "--bind_ip_all not applied (argv: $argv)"
 
 # a non-mongod command runs as-is, with no init side effects
@@ -141,7 +144,7 @@ fi
 # data survives a restart
 docker restart "$CID" >/dev/null
 wait_healthy "$CID" 60 >/dev/null || true
-rcnt="$(msh --host 127.0.0.1 -u root -p trustno1 --authenticationDatabase admin --eval 'db.getSiblingDB("appdb").widgets.countDocuments()' | tr -d '\r')"
+rcnt="$(msh_auth --host 127.0.0.1 --eval 'db.getSiblingDB("appdb").widgets.countDocuments()' | tr -d '\r')"
 [ "$rcnt" = "2" ] && ok "data persisted across restart" || bad "data lost across restart (got '$rcnt')"
 
 # _FILE secrets: the root password can come from a mounted file
